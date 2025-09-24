@@ -26,7 +26,6 @@ CREATE TABLE AllergiesInformation (
 CREATE TABLE Ingredients (
     ingredient_id INTEGER PRIMARY KEY,
     name TEXT,
-    quantity REAL,
     unit TEXT
 );
 
@@ -50,6 +49,7 @@ CREATE TABLE Recipes (
 CREATE TABLE RecipeIngredients (
     recipe_id INTEGER,
     ingredient_id INTEGER,
+    quantity REAL,
     PRIMARY KEY (recipe_id, ingredient_id),
     FOREIGN KEY (recipe_id) REFERENCES Recipes(recipe_id),
     FOREIGN KEY (ingredient_id) REFERENCES Ingredients(ingredient_id)
@@ -62,8 +62,6 @@ CREATE TABLE RecipeInstructions (
     step_number INTEGER,
     description TEXT,
     ingredient_id INTEGER,
-    quantity REAL,
-    unit TEXT,
     FOREIGN KEY (recipe_id) REFERENCES Recipes(recipe_id),
     FOREIGN KEY (ingredient_id) REFERENCES Ingredients(ingredient_id)
 );
