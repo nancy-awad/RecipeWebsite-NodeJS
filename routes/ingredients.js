@@ -2,18 +2,27 @@ const express = require('express');
 const router = express.Router();
 const ingredientController = require('../controllers/ingredientController');
 const { validateIngredient } = require('../middleware/validation');
+const { authenticateToken } = require('../middleware/auth');
 
-// GET routes
+// ============================================
+// PUBLIC ROUTES (No authentication required)
+// ============================================
+
+// Anyone can view ingredients
 router.get('/', ingredientController.getAllIngredients);
 router.get('/:id', ingredientController.getIngredientById);
 
-// POST routes
-router.post('/', validateIngredient, ingredientController.createIngredient);
+// ============================================
+// PROTECTED ROUTES (Authentication required)
+// ============================================
 
-// PUT routes
-router.put('/:id', validateIngredient, ingredientController.updateIngredient);
+// Only logged-in users can create ingredients
+router.post('/', authenticateToken, validateIngredient, ingredientController.createIngredient);
 
-// DELETE routes
-router.delete('/:id', ingredientController.deleteIngredient);
+// Only logged-in users can update ingredients
+router.put('/:id', authenticateToken, validateIngredient, ingredientController.updateIngredient);
+
+// Only logged-in users can delete ingredients
+router.delete('/:id', authenticateToken, ingredientController.deleteIngredient);
 
 module.exports = router;

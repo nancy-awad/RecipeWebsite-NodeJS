@@ -2,25 +2,36 @@ const express = require('express');
 const router = express.Router();
 const recipeController = require('../controllers/recipeController');
 const { validateRecipe, validateRecipeUpdate } = require('../middleware/validation');
+const { authenticateToken } = require('../middleware/auth');
 
-// GET routes
+// ============================================
+// PUBLIC ROUTES (No authentication required)
+// ============================================
+
+// Anyone can view recipes
 router.get('/', recipeController.getAllRecipes);
 router.get('/:id', recipeController.getRecipeById);
 router.get('/cuisine/:cuisineId', recipeController.getRecipesByCuisine);
 router.get('/no-allergens/:allergyId', recipeController.getRecipesWithoutAllergen);
 router.get('/goal/:goalId', recipeController.getRecipesByGoal);
 
-// POST routes
-router.post('/', validateRecipe, recipeController.createRecipe);
-router.post('/:id/ingredients', recipeController.addIngredientToRecipe);
+// ============================================
+// PROTECTED ROUTES (Authentication required)
+// ============================================
 
-// PUT routes
-router.put('/:id/title', validateRecipeUpdate, recipeController.updateRecipeTitle);
-router.put('/:id/allergy', recipeController.updateRecipeAllergy);
-router.put('/:id/instructions/:stepId', recipeController.updateRecipeInstruction);
+// Only logged-in users can create recipes
+router.post('/', authenticateToken, validateRecipe, recipeController.createRecipe);
 
-// DELETE routes
-router.delete('/:id', recipeController.deleteRecipe);
-router.delete('/:id/ingredients/:ingredientId', recipeController.removeIngredientFromRecipe);
+// Only logged-in users can add ingredients
+router.post('/:id/ingredients', authenticateToken, recipeController.addIngredientToRecipe);
+
+// Only recipe owner can update their recipe (ownership checked in controller)
+router.put('/:id/title', authenticateToken, validateRecipeUpdate, recipeController.updateRecipeTitle);
+router.put('/:id/allergy', authenticateToken, recipeController.updateRecipeAllergy);
+router.put('/:id/instructions/:stepId', authenticateToken, recipeController.updateRecipeInstruction);
+
+// Only recipe owner can delete their recipe (ownership checked in controller)
+router.delete('/:id', authenticateToken, recipeController.deleteRecipe);
+router.delete('/:id/ingredients/:ingredientId', authenticateToken, recipeController.removeIngredientFromRecipe);
 
 module.exports = router;

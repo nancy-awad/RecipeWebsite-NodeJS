@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 
 // Créez une instance de la base de données SQLite ou ouvrez-la si elle existe déjà.
-const db = new sqlite3.Database('recipesDB.db');
+const db = new sqlite3.Database('database/recipesDB.db');
 
 // Lisez le fichier create_tables.sql et exécutez-le
 const createTablesSQL = fs.readFileSync('create_tables.sql', 'utf-8');
@@ -26,3 +26,9 @@ db.exec(createTablesSQL, (err) => {
     });
   }
 });
+
+//  Méthode .exec() expliquée :
+//   - Exécute plusieurs requêtes SQL d'un coup
+//   - Parfaite pour les fichiers .sql complets
+//   - Divise automatiquement les requêtes séparées par ;
+//   - Pas de callback individuel par requête

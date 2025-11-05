@@ -65,3 +65,18 @@ CREATE TABLE RecipeInstructions (
     FOREIGN KEY (recipe_id) REFERENCES Recipes(recipe_id),
     FOREIGN KEY (ingredient_id) REFERENCES Ingredients(ingredient_id)
 );
+
+-- ============================================
+-- OPTIONAL: USER FUNCTIONALITY
+-- ============================================
+-- To add user authentication, favorites, and ratings:
+-- Run the user_tables.sql file AFTER this file
+--
+-- sqlite3 recettes.db < database/user_tables.sql
+--
+-- This will add:
+-- - Users table (authentication with username/email/password)
+-- - UserFavorites table (users can save favorite recipes)
+-- - RecipeRatings table (users can rate recipes 1-5 stars)
+-- - Update Recipes table with user_id (track recipe creator)
+-- - Add average_rating and total_ratings to Recipes table

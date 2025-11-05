@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const session = require('express-session');
 require('dotenv').config();
 
 const app = express();
@@ -8,6 +9,7 @@ const app = express();
 const recipeRoutes = require('./routes/recipes');
 const cuisineRoutes = require('./routes/cuisines');
 const ingredientRoutes = require('./routes/ingredients');
+const userRoutes = require('./routes/users');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -15,6 +17,18 @@ const errorHandler = require('./middleware/errorHandler');
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production (HTTPS)
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
 
 // CORS middleware (if needed for frontend testing)
 app.use((req, res, next) => {
@@ -31,7 +45,7 @@ app.use((req, res, next) => {
 
 // Request logging middleware
 app.use((req, res, next) => {
-    console.log(`📝 ${new Date().toISOString()} - ${req.method} ${req.path}`);
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
 });
 
@@ -39,6 +53,7 @@ app.use((req, res, next) => {
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/cuisines', cuisineRoutes);
 app.use('/api/ingredients', ingredientRoutes);
+app.use('/api/users', userRoutes);
 
 // Home route
 app.get('/', (req, res) => {
@@ -50,7 +65,8 @@ app.get('/', (req, res) => {
         endpoints: {
             recipes: '/api/recipes',
             cuisines: '/api/cuisines',
-            ingredients: '/api/ingredients'
+            ingredients: '/api/ingredients',
+            users: '/api/users'
         },
         documentation: {
             postman: 'Import the Postman collection to test all endpoints',
@@ -69,12 +85,14 @@ app.get('/help', (req, res) => {
             'GET /help': 'This help page',
             'GET /api/recipes': 'Get all recipes',
             'GET /api/recipes/:id': 'Get recipe by ID',
-            'GET /api/recipes/cuisine/:cuisineId': 'Get recipes by cuisine',
-            'GET /api/recipes/no-allergens/:allergyId': 'Get recipes without allergen',
-            'GET /api/recipes/goal/:goalId': 'Get recipes by goal',
-            'POST /api/recipes': 'Create new recipe',
-            'PUT /api/recipes/:id/title': 'Update recipe title',
-            'DELETE /api/recipes/:id': 'Delete recipe'
+            'POST /api/recipes': 'Create new recipe (requires auth)',
+            'PUT /api/recipes/:id': 'Update recipe (requires auth)',
+            'DELETE /api/recipes/:id': 'Delete recipe (requires auth)',
+            'POST /api/users/register': 'Register new user',
+            'POST /api/users/login': 'Login and get JWT token',
+            'GET /api/users/profile': 'Get user profile (requires auth)',
+            'GET /api/users/favorites': 'Get favorite recipes (requires auth)',
+            'POST /api/users/favorites/:recipeId': 'Add to favorites (requires auth)'
         },
         contact: {
             developer: 'Recipe Website API Student Project',
@@ -96,7 +114,9 @@ app.use('*', (req, res) => {
             'GET /help',
             'GET /api/recipes',
             'GET /api/cuisines',
-            'GET /api/ingredients'
+            'GET /api/ingredients',
+            'POST /api/users/register',
+            'POST /api/users/login'
         ]
     });
 });
@@ -106,18 +126,20 @@ app.use(errorHandler);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-    console.log('🚀 Recipe Website API Server Started');
-    console.log(`📡 Server running on port ${port}`);
-    console.log(`🌐 API URL: http://localhost:${port}`);
-    console.log(`📖 API documentation: http://localhost:${port}/`);
-    console.log(`❓ Help page: http://localhost:${port}/help`);
+    console.log('Recipe Website API Server Started');
+    console.log(`Server running on port ${port}`);
+    console.log(`API URL: http://localhost:${port}`);
+    console.log(`API documentation: http://localhost:${port}/`);
+    console.log(`Help page: http://localhost:${port}/help`);
     console.log('');
-    console.log('📋 Available endpoints:');
+    console.log('Available endpoints:');
     console.log(`   GET  http://localhost:${port}/api/recipes`);
     console.log(`   GET  http://localhost:${port}/api/cuisines`);
     console.log(`   GET  http://localhost:${port}/api/ingredients`);
+    console.log(`   POST http://localhost:${port}/api/users/register`);
+    console.log(`   POST http://localhost:${port}/api/users/login`);
     console.log('');
-    console.log('⚠️  Note: Most endpoints return TODO messages - implement logic in controllers and models');
+    console.log('Note: Most endpoints return TODO messages - implement logic in controllers and models');
 });
 
 module.exports = app;

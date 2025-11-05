@@ -1,5 +1,5 @@
 const errorHandler = (err, req, res, next) => {
-    console.error('❌ Error:', err.message);
+    console.error('Error:', err.message);
     console.error('Stack trace:', err.stack);
 
     // SQLite errors
