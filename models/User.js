@@ -1,4 +1,4 @@
-const database = require('../config/database');
+const database = require('../config/database').getDB();
 const bcrypt = require('bcryptjs');
 
 class User {
@@ -9,6 +9,7 @@ class User {
         this.password_hash = data.password_hash;
         this.first_name = data.first_name;
         this.last_name = data.last_name;
+        this.is_admin = data.is_admin || 0;
         this.created_at = data.created_at;
         this.updated_at = data.updated_at;
     }
@@ -106,8 +107,8 @@ class User {
                 const hashedPassword = await bcrypt.hash(userData.password, 10);
 
                 const sql = `
-                    INSERT INTO Users (username, email, password_hash, first_name, last_name)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO Users (username, email, password_hash, first_name, last_name, is_admin)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 `;
 
                 database.run(
@@ -117,7 +118,8 @@ class User {
                         userData.email,
                         hashedPassword,
                         userData.first_name || null,
-                        userData.last_name || null
+                        userData.last_name || null,
+                        userData.is_admin || 0
                     ],
                     function (err) {
                         if (err) {

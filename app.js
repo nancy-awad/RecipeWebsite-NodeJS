@@ -129,17 +129,6 @@ app.listen(port, () => {
     console.log('Recipe Website API Server Started');
     console.log(`Server running on port ${port}`);
     console.log(`API URL: http://localhost:${port}`);
-    console.log(`API documentation: http://localhost:${port}/`);
-    console.log(`Help page: http://localhost:${port}/help`);
-    console.log('');
-    console.log('Available endpoints:');
-    console.log(`   GET  http://localhost:${port}/api/recipes`);
-    console.log(`   GET  http://localhost:${port}/api/cuisines`);
-    console.log(`   GET  http://localhost:${port}/api/ingredients`);
-    console.log(`   POST http://localhost:${port}/api/users/register`);
-    console.log(`   POST http://localhost:${port}/api/users/login`);
-    console.log('');
-    console.log('Note: Most endpoints return TODO messages - implement logic in controllers and models');
 });
 
 module.exports = app;

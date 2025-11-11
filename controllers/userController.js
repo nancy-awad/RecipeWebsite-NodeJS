@@ -6,7 +6,7 @@ const User = require('../models/User');
  */
 exports.register = async (req, res, next) => {
     try {
-        const { username, email, password, first_name, last_name } = req.body;
+        const { username, email, password, first_name, last_name, is_admin } = req.body;
 
         // Validate required fields
         if (!username || !email || !password) {
@@ -39,14 +39,16 @@ exports.register = async (req, res, next) => {
             email,
             password,
             first_name,
-            last_name
+            last_name,
+            is_admin: is_admin || false
         });
 
         // Create session for the new user
         req.session.user = {
             user_id: newUser.user_id,
             username: newUser.username,
-            email: newUser.email
+            email: newUser.email,
+            is_admin: newUser.is_admin || false
         };
 
         res.status(201).json({
@@ -99,7 +101,8 @@ exports.login = async (req, res, next) => {
         req.session.user = {
             user_id: user.user_id,
             username: user.username,
-            email: user.email
+            email: user.email,
+            is_admin: user.is_admin || false
         };
 
         res.status(200).json({
