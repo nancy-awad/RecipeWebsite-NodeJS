@@ -124,7 +124,7 @@ app.use('*', (req, res) => {
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 2000;
 app.listen(port, () => {
     console.log('Recipe Website API Server Started');
     console.log(`Server running on port ${port}`);

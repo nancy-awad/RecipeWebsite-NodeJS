@@ -12,29 +12,25 @@ const sql = {
     getAll: `
         SELECT
             r.recipe_id, r.title, r.description, r.image_url,
+            r.average_rating, r.total_ratings,
             c.name as cuisine_name,
-            g.name as goal_name,
-            d.name as diet_name,
-            a.name as allergy_name
+            GROUP_CONCAT(DISTINCT g.name) as goal_names,
+            GROUP_CONCAT(DISTINCT d.name) as diet_names
         FROM Recipes r
         LEFT JOIN Cuisines c ON r.cuisine_id = c.cuisine_id
-        LEFT JOIN Goals g ON r.goal_id = g.goal_id
-        LEFT JOIN DietaryInformation d ON r.DietaryInformation_id = d.diet_id
-        LEFT JOIN AllergiesInformation a ON r.AllergiesInformation_id = a.allergy_id
+        LEFT JOIN RecipeGoals rg ON r.recipe_id = rg.recipe_id
+        LEFT JOIN Goals g ON rg.goal_id = g.goal_id
+        LEFT JOIN RecipeDietary rd ON r.recipe_id = rd.recipe_id
+        LEFT JOIN DietaryInformation d ON rd.diet_id = d.diet_id
+        GROUP BY r.recipe_id
     `,
 
     getById: `
         SELECT
             r.*,
-            c.name as cuisine_name,
-            g.name as goal_name,
-            d.name as diet_name,
-            a.name as allergy_name
+            c.name as cuisine_name
         FROM Recipes r
         LEFT JOIN Cuisines c ON r.cuisine_id = c.cuisine_id
-        LEFT JOIN Goals g ON r.goal_id = g.goal_id
-        LEFT JOIN DietaryInformation d ON r.DietaryInformation_id = d.diet_id
-        LEFT JOIN AllergiesInformation a ON r.AllergiesInformation_id = a.allergy_id
         WHERE r.recipe_id = ?
     `,
 
@@ -52,6 +48,28 @@ const sql = {
         ORDER BY step_number
     `,
 
+    getDietaryForRecipe: `
+        SELECT d.diet_id, d.name
+        FROM RecipeDietary rd
+        JOIN DietaryInformation d ON rd.diet_id = d.diet_id
+        WHERE rd.recipe_id = ?
+    `,
+
+    getGoalsForRecipe: `
+        SELECT g.goal_id, g.name
+        FROM RecipeGoals rg
+        JOIN Goals g ON rg.goal_id = g.goal_id
+        WHERE rg.recipe_id = ?
+    `,
+
+    getAllergensForRecipe: `
+        SELECT DISTINCT a.allergy_id, a.name
+        FROM RecipeIngredients ri
+        JOIN IngredientAllergies ia ON ri.ingredient_id = ia.ingredient_id
+        JOIN AllergiesInformation a ON ia.allergy_id = a.allergy_id
+        WHERE ri.recipe_id = ?
+    `,
+
     getByCuisine: `
         SELECT
             r.recipe_id, r.title, r.description, r.image_url,
@@ -66,8 +84,9 @@ const sql = {
             r.recipe_id, r.title, r.description, r.image_url,
             g.name as goal_name
         FROM Recipes r
-        JOIN Goals g ON r.goal_id = g.goal_id
-        WHERE r.goal_id = ?
+        JOIN RecipeGoals rg ON r.recipe_id = rg.recipe_id
+        JOIN Goals g ON rg.goal_id = g.goal_id
+        WHERE rg.goal_id = ?
     `,
 
     getWithoutAllergen: `
@@ -76,31 +95,36 @@ const sql = {
             c.name as cuisine_name
         FROM Recipes r
         LEFT JOIN Cuisines c ON r.cuisine_id = c.cuisine_id
-        WHERE r.AllergiesInformation_id != ? OR r.AllergiesInformation_id IS NULL
+        WHERE r.recipe_id NOT IN (
+            SELECT ri.recipe_id
+            FROM RecipeIngredients ri
+            JOIN IngredientAllergies ia ON ri.ingredient_id = ia.ingredient_id
+            WHERE ia.allergy_id = ?
+        )
     `,
 
     getByUserId: `
         SELECT
             r.recipe_id, r.title, r.description, r.image_url,
+            r.average_rating, r.total_ratings,
             c.name as cuisine_name,
-            g.name as goal_name,
-            d.name as diet_name,
-            a.name as allergy_name,
-            r.average_rating,
-            r.total_ratings
+            GROUP_CONCAT(DISTINCT g.name) as goal_names,
+            GROUP_CONCAT(DISTINCT d.name) as diet_names
         FROM Recipes r
         LEFT JOIN Cuisines c ON r.cuisine_id = c.cuisine_id
-        LEFT JOIN Goals g ON r.goal_id = g.goal_id
-        LEFT JOIN DietaryInformation d ON r.DietaryInformation_id = d.diet_id
-        LEFT JOIN AllergiesInformation a ON r.AllergiesInformation_id = a.allergy_id
+        LEFT JOIN RecipeGoals rg ON r.recipe_id = rg.recipe_id
+        LEFT JOIN Goals g ON rg.goal_id = g.goal_id
+        LEFT JOIN RecipeDietary rd ON r.recipe_id = rd.recipe_id
+        LEFT JOIN DietaryInformation d ON rd.diet_id = d.diet_id
         WHERE r.user_id = ?
+        GROUP BY r.recipe_id
         ORDER BY r.recipe_id DESC
     `,
 
     // POST queries
     create: `
-        INSERT INTO Recipes (title, description, image_url, cuisine_id, goal_id, DietaryInformation_id, AllergiesInformation_id, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO Recipes (title, description, image_url, cuisine_id, user_id)
+        VALUES (?, ?, ?, ?, ?)
     `,
 
     addIngredient: `
@@ -108,10 +132,38 @@ const sql = {
         VALUES (?, ?, ?)
     `,
 
+    addDietary: `
+        INSERT INTO RecipeDietary (recipe_id, diet_id)
+        VALUES (?, ?)
+    `,
+
+    removeDietary: `
+        DELETE FROM RecipeDietary
+        WHERE recipe_id = ? AND diet_id = ?
+    `,
+
+    addGoal: `
+        INSERT INTO RecipeGoals (recipe_id, goal_id)
+        VALUES (?, ?)
+    `,
+
+    removeGoal: `
+        DELETE FROM RecipeGoals
+        WHERE recipe_id = ? AND goal_id = ?
+    `,
+
+    addInstruction: `
+        INSERT INTO RecipeInstructions (recipe_id, step_number, description, ingredient_id)
+        VALUES (?, ?, ?, ?)
+    `,
+
+    deleteInstruction: `
+        DELETE FROM RecipeInstructions
+        WHERE instruction_id = ? AND recipe_id = ?
+    `,
+
     // PUT queries
     updateTitle: 'UPDATE Recipes SET title = ? WHERE recipe_id = ?',
-
-    updateAllergy: 'UPDATE Recipes SET AllergiesInformation_id = ? WHERE recipe_id = ?',
 
     updateInstruction: `
         UPDATE RecipeInstructions
@@ -131,6 +183,15 @@ const sql = {
     checkOwnership: 'SELECT user_id FROM Recipes WHERE recipe_id = ?'
 };
 
+// Helper: transform GROUP_CONCAT strings into arrays
+function parseGroupConcat(row) {
+    return {
+        ...row,
+        goals: row.goal_names ? row.goal_names.split(',') : [],
+        dietary: row.diet_names ? row.diet_names.split(',') : []
+    };
+}
+
 // ============================================
 // PUBLIC ROUTES (No authentication required)
 // ============================================
@@ -140,7 +201,6 @@ const sql = {
  * GET /api/recipes
  */
 router.get('/', (req, res) => {
-
     database.all(sql.getAll, [], (err, rows) => {
         if (err) {
             return res.status(500).json({
@@ -150,10 +210,12 @@ router.get('/', (req, res) => {
             });
         }
 
+        const data = rows.map(parseGroupConcat);
+
         res.status(200).json({
             success: true,
-            count: rows.length,
-            data: rows
+            count: data.length,
+            data
         });
     });
 });
@@ -175,17 +237,19 @@ router.get('/my-recipes', authenticate, (req, res) => {
             });
         }
 
+        const data = rows.map(parseGroupConcat);
+
         res.status(200).json({
             success: true,
-            count: rows.length,
-            data: rows,
-            message: rows.length === 0 ? 'You have not created any recipes yet' : undefined
+            count: data.length,
+            data,
+            message: data.length === 0 ? 'You have not created any recipes yet' : undefined
         });
     });
 });
 
 /**
- * Get recipe by ID with ingredients and instructions
+ * Get recipe by ID with ingredients, instructions, dietary, goals, and allergens
  * GET /api/recipes/:id
  */
 router.get('/:id', (req, res) => {
@@ -207,35 +271,54 @@ router.get('/:id', (req, res) => {
             });
         }
 
-        // Get ingredients for this recipe
-        database.all(sql.getIngredients, [recipeId], (err, ingredients) => {
-            if (err) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error fetching ingredients',
-                    error: err.message
-                });
-            }
+        // Fetch all sub-data in parallel using a counter
+        let pending = 5;
+        let failed = false;
 
-            // Get instructions for this recipe
-            database.all(sql.getInstructions, [recipeId], (err, instructions) => {
-                if (err) {
-                    return res.status(500).json({
-                        success: false,
-                        message: 'Error fetching instructions',
-                        error: err.message
-                    });
-                }
-
-                // Combine all data
-                recipe.ingredients = ingredients;
-                recipe.instructions = instructions;
-
+        const done = () => {
+            if (--pending === 0 && !failed) {
                 res.status(200).json({
                     success: true,
                     data: recipe
                 });
-            });
+            }
+        };
+
+        const fail = (msg, error) => {
+            if (!failed) {
+                failed = true;
+                res.status(500).json({ success: false, message: msg, error: error.message });
+            }
+        };
+
+        database.all(sql.getIngredients, [recipeId], (err, rows) => {
+            if (err) return fail('Error fetching ingredients', err);
+            recipe.ingredients = rows;
+            done();
+        });
+
+        database.all(sql.getInstructions, [recipeId], (err, rows) => {
+            if (err) return fail('Error fetching instructions', err);
+            recipe.instructions = rows;
+            done();
+        });
+
+        database.all(sql.getDietaryForRecipe, [recipeId], (err, rows) => {
+            if (err) return fail('Error fetching dietary info', err);
+            recipe.dietary = rows;
+            done();
+        });
+
+        database.all(sql.getGoalsForRecipe, [recipeId], (err, rows) => {
+            if (err) return fail('Error fetching goals', err);
+            recipe.goals = rows;
+            done();
+        });
+
+        database.all(sql.getAllergensForRecipe, [recipeId], (err, rows) => {
+            if (err) return fail('Error fetching allergens', err);
+            recipe.allergens = rows;
+            done();
         });
     });
 });
@@ -265,7 +348,7 @@ router.get('/cuisine/:cuisineId', (req, res) => {
 });
 
 /**
- * Get recipes without specific allergen
+ * Get recipes without specific allergen (ingredient-level check)
  * GET /api/recipes/no-allergens/:allergyId
  */
 router.get('/no-allergens/:allergyId', (req, res) => {
@@ -289,7 +372,7 @@ router.get('/no-allergens/:allergyId', (req, res) => {
 });
 
 /**
- * Get recipes by goal ID
+ * Get recipes by goal ID (through junction table)
  * GET /api/recipes/goal/:goalId
  */
 router.get('/goal/:goalId', (req, res) => {
@@ -322,20 +405,19 @@ router.get('/goal/:goalId', (req, res) => {
  * Requires authentication
  */
 router.post('/', authenticate, (req, res) => {
-    const { title, description, image_url, cuisine_id, goal_id, DietaryInformation_id, AllergiesInformation_id } = req.body;
+    const { title, description, image_url, cuisine_id } = req.body;
     const userId = req.user.user_id;
 
-    // Validate required fields
-    if (!title || !description || !cuisine_id || !goal_id) {
+    if (!title || !description || !cuisine_id) {
         return res.status(400).json({
             success: false,
-            message: 'Title, description, cuisine_id, and goal_id are required'
+            message: 'Title, description, and cuisine_id are required'
         });
     }
 
     database.run(
         sql.create,
-        [title, description, image_url, cuisine_id, goal_id, DietaryInformation_id, AllergiesInformation_id, userId],
+        [title, description, image_url, cuisine_id, userId],
         function (err) {
             if (err) {
                 return res.status(500).json({
@@ -362,9 +444,9 @@ router.post('/', authenticate, (req, res) => {
 /**
  * Add ingredient to recipe
  * POST /api/recipes/:id/ingredients
- * Requires authentication
+ * Requires authentication + ownership
  */
-router.post('/:id/ingredients', authenticate, (req, res) => {
+router.post('/:id/ingredients', authenticate, checkRecipeOwnership, (req, res) => {
     const recipeId = req.params.id;
     const { ingredient_id, quantity } = req.body;
 
@@ -392,15 +474,223 @@ router.post('/:id/ingredients', authenticate, (req, res) => {
 });
 
 /**
+ * Add dietary classification to recipe
+ * POST /api/recipes/:id/dietary
+ * Requires authentication + ownership
+ */
+router.post('/:id/dietary', authenticate, checkRecipeOwnership, (req, res) => {
+    const recipeId = req.params.id;
+    const { diet_id } = req.body;
+
+    if (!diet_id) {
+        return res.status(400).json({
+            success: false,
+            message: 'diet_id is required'
+        });
+    }
+
+    database.run(sql.addDietary, [recipeId, diet_id], function (err) {
+        if (err) {
+            if (err.message.includes('UNIQUE constraint') || err.message.includes('PRIMARY KEY')) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'This dietary classification is already assigned to this recipe'
+                });
+            }
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to add dietary classification',
+                error: err.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Dietary classification added to recipe'
+        });
+    });
+});
+
+/**
+ * Remove dietary classification from recipe
+ * DELETE /api/recipes/:id/dietary/:dietId
+ * Requires authentication + ownership
+ */
+router.delete('/:id/dietary/:dietId', authenticate, checkRecipeOwnership, (req, res) => {
+    const recipeId = req.params.id;
+    const dietId = req.params.dietId;
+
+    database.run(sql.removeDietary, [recipeId, dietId], function (err) {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to remove dietary classification',
+                error: err.message
+            });
+        }
+
+        if (this.changes === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Dietary classification not found on this recipe'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Dietary classification removed from recipe'
+        });
+    });
+});
+
+/**
+ * Add goal to recipe
+ * POST /api/recipes/:id/goals
+ * Requires authentication + ownership
+ */
+router.post('/:id/goals', authenticate, checkRecipeOwnership, (req, res) => {
+    const recipeId = req.params.id;
+    const { goal_id } = req.body;
+
+    if (!goal_id) {
+        return res.status(400).json({
+            success: false,
+            message: 'goal_id is required'
+        });
+    }
+
+    database.run(sql.addGoal, [recipeId, goal_id], function (err) {
+        if (err) {
+            if (err.message.includes('UNIQUE constraint') || err.message.includes('PRIMARY KEY')) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'This goal is already assigned to this recipe'
+                });
+            }
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to add goal',
+                error: err.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Goal added to recipe'
+        });
+    });
+});
+
+/**
+ * Remove goal from recipe
+ * DELETE /api/recipes/:id/goals/:goalId
+ * Requires authentication + ownership
+ */
+router.delete('/:id/goals/:goalId', authenticate, checkRecipeOwnership, (req, res) => {
+    const recipeId = req.params.id;
+    const goalId = req.params.goalId;
+
+    database.run(sql.removeGoal, [recipeId, goalId], function (err) {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to remove goal',
+                error: err.message
+            });
+        }
+
+        if (this.changes === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Goal not found on this recipe'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Goal removed from recipe'
+        });
+    });
+});
+
+/**
+ * Add instruction to recipe
+ * POST /api/recipes/:id/instructions
+ * Requires authentication + ownership
+ */
+router.post('/:id/instructions', authenticate, checkRecipeOwnership, (req, res) => {
+    const recipeId = req.params.id;
+    const { step_number, description, ingredient_id } = req.body;
+
+    if (!step_number || !description) {
+        return res.status(400).json({
+            success: false,
+            message: 'step_number and description are required'
+        });
+    }
+
+    database.run(sql.addInstruction, [recipeId, step_number, description, ingredient_id || null], function (err) {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to add instruction',
+                error: err.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Instruction added to recipe',
+            data: {
+                instruction_id: this.lastID,
+                step_number,
+                description
+            }
+        });
+    });
+});
+
+/**
+ * Delete instruction from recipe
+ * DELETE /api/recipes/:id/instructions/:stepId
+ * Requires authentication + ownership
+ */
+router.delete('/:id/instructions/:stepId', authenticate, checkRecipeOwnership, (req, res) => {
+    const recipeId = req.params.id;
+    const stepId = req.params.stepId;
+
+    database.run(sql.deleteInstruction, [stepId, recipeId], function (err) {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to delete instruction',
+                error: err.message
+            });
+        }
+
+        if (this.changes === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Instruction not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Instruction deleted successfully'
+        });
+    });
+});
+
+/**
  * Update recipe title
  * PUT /api/recipes/:id/title
- * Requires authentication + ownership (checked by middleware)
+ * Requires authentication + ownership
  */
 router.put('/:id/title', authenticate, checkRecipeOwnership, (req, res) => {
     const recipeId = req.params.id;
     const { title } = req.body;
 
-    // Validate input
     if (!title || title.trim().length === 0) {
         return res.status(400).json({
             success: false,
@@ -408,8 +698,6 @@ router.put('/:id/title', authenticate, checkRecipeOwnership, (req, res) => {
         });
     }
 
-    // Ownership already verified by checkRecipeOwnership middleware
-    // User owns the recipe OR is admin - safe to update
     database.run(sql.updateTitle, [title, recipeId], function (err) {
         if (err) {
             return res.status(500).json({
@@ -427,42 +715,15 @@ router.put('/:id/title', authenticate, checkRecipeOwnership, (req, res) => {
 });
 
 /**
- * Update recipe allergy information
- * PUT /api/recipes/:id/allergy
- * Requires authentication + ownership (checked by middleware)
- */
-router.put('/:id/allergy', authenticate, checkRecipeOwnership, (req, res) => {
-    const recipeId = req.params.id;
-    const { AllergiesInformation_id } = req.body;
-
-    // Ownership already verified by checkRecipeOwnership middleware
-    database.run(sql.updateAllergy, [AllergiesInformation_id, recipeId], function (err) {
-        if (err) {
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to update allergy information',
-                error: err.message
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            message: 'Allergy information updated successfully'
-        });
-    });
-});
-
-/**
  * Update recipe instruction
  * PUT /api/recipes/:id/instructions/:stepId
- * Requires authentication + ownership (checked by middleware)
+ * Requires authentication + ownership
  */
 router.put('/:id/instructions/:stepId', authenticate, checkRecipeOwnership, (req, res) => {
     const recipeId = req.params.id;
     const stepId = req.params.stepId;
     const { description } = req.body;
 
-    // Validate input
     if (!description) {
         return res.status(400).json({
             success: false,
@@ -470,7 +731,6 @@ router.put('/:id/instructions/:stepId', authenticate, checkRecipeOwnership, (req
         });
     }
 
-    // Ownership already verified by checkRecipeOwnership middleware
     database.run(sql.updateInstruction, [description, stepId, recipeId], function (err) {
         if (err) {
             return res.status(500).json({
@@ -497,13 +757,11 @@ router.put('/:id/instructions/:stepId', authenticate, checkRecipeOwnership, (req
 /**
  * Delete recipe
  * DELETE /api/recipes/:id
- * Requires authentication + ownership (checked by middleware)
+ * Requires authentication + ownership
  */
 router.delete('/:id', authenticate, checkRecipeOwnership, (req, res) => {
     const recipeId = req.params.id;
 
-    // Ownership already verified by checkRecipeOwnership middleware
-    // Delete the recipe (CASCADE will handle related records)
     database.run(sql.deleteRecipe, [recipeId], function (err) {
         if (err) {
             return res.status(500).json({
@@ -523,13 +781,12 @@ router.delete('/:id', authenticate, checkRecipeOwnership, (req, res) => {
 /**
  * Remove ingredient from recipe
  * DELETE /api/recipes/:recipeId/ingredients/:ingredientId
- * Requires authentication + ownership (checked by middleware)
+ * Requires authentication + ownership
  */
 router.delete('/:recipeId/ingredients/:ingredientId', authenticate, checkRecipeOwnership, (req, res) => {
     const recipeId = req.params.recipeId;
     const ingredientId = req.params.ingredientId;
 
-    // Ownership already verified by checkRecipeOwnership middleware
     database.run(sql.removeIngredient, [recipeId, ingredientId], function (err) {
         if (err) {
             return res.status(500).json({
@@ -568,7 +825,6 @@ router.post('/:id/ratings', authenticate, (req, res) => {
     const userId = req.user.user_id;
     const { rating, review } = req.body;
 
-    // Validate input
     if (!rating || rating < 1 || rating > 5) {
         return res.status(400).json({
             success: false,
@@ -576,14 +832,12 @@ router.post('/:id/ratings', authenticate, (req, res) => {
         });
     }
 
-    // User can rate any recipe (not just their own)
-    // INSERT OR REPLACE ensures one rating per user per recipe
-    const sql = `
+    const ratingSql = `
         INSERT OR REPLACE INTO RecipeRatings (recipe_id, user_id, rating, review_text, created_at)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     `;
 
-    database.run(sql, [recipeId, userId, rating, review || null], function (err) {
+    database.run(ratingSql, [recipeId, userId, rating, review || null], function (err) {
         if (err) {
             return res.status(500).json({
                 success: false,
@@ -609,7 +863,6 @@ router.put('/:id/ratings', authenticate, (req, res) => {
     const userId = req.user.user_id;
     const { rating, review } = req.body;
 
-    // Validate input
     if (!rating || rating < 1 || rating > 5) {
         return res.status(400).json({
             success: false,
@@ -617,14 +870,13 @@ router.put('/:id/ratings', authenticate, (req, res) => {
         });
     }
 
-    // Update only the current user's rating
-    const sql = `
+    const updateRatingSql = `
         UPDATE RecipeRatings
         SET rating = ?, review_text = ?, updated_at = CURRENT_TIMESTAMP
         WHERE recipe_id = ? AND user_id = ?
     `;
 
-    database.run(sql, [rating, review || null, recipeId, userId], function (err) {
+    database.run(updateRatingSql, [rating, review || null, recipeId, userId], function (err) {
         if (err) {
             return res.status(500).json({
                 success: false,
@@ -656,10 +908,9 @@ router.delete('/:id/ratings', authenticate, (req, res) => {
     const recipeId = req.params.id;
     const userId = req.user.user_id;
 
-    // Delete only the current user's rating
-    const sql = 'DELETE FROM RecipeRatings WHERE recipe_id = ? AND user_id = ?';
+    const deleteRatingSql = 'DELETE FROM RecipeRatings WHERE recipe_id = ? AND user_id = ?';
 
-    database.run(sql, [recipeId, userId], function (err) {
+    database.run(deleteRatingSql, [recipeId, userId], function (err) {
         if (err) {
             return res.status(500).json({
                 success: false,
@@ -690,7 +941,7 @@ router.delete('/:id/ratings', authenticate, (req, res) => {
 router.get('/:id/ratings', (req, res) => {
     const recipeId = req.params.id;
 
-    const sql = `
+    const getRatingsSql = `
         SELECT
             rr.rating,
             rr.review_text,
@@ -702,7 +953,7 @@ router.get('/:id/ratings', (req, res) => {
         ORDER BY rr.created_at DESC
     `;
 
-    database.all(sql, [recipeId], (err, rows) => {
+    database.all(getRatingsSql, [recipeId], (err, rows) => {
         if (err) {
             return res.status(500).json({
                 success: false,
@@ -711,7 +962,6 @@ router.get('/:id/ratings', (req, res) => {
             });
         }
 
-        // Calculate average rating
         const avgRating = rows.length > 0
             ? rows.reduce((sum, row) => sum + row.rating, 0) / rows.length
             : 0;

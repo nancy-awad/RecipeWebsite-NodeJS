@@ -219,13 +219,19 @@ class User {
     static async getFavorites(userId) {
         return new Promise((resolve, reject) => {
             const sql = `
-                SELECT r.*, c.name as cuisine_name, g.name as goal_name,
+                SELECT r.*, c.name as cuisine_name,
+                       GROUP_CONCAT(DISTINCT g.name) as goal_names,
+                       GROUP_CONCAT(DISTINCT d.name) as diet_names,
                        uf.added_at as favorited_at
                 FROM UserFavorites uf
                 JOIN Recipes r ON uf.recipe_id = r.recipe_id
                 LEFT JOIN Cuisines c ON r.cuisine_id = c.cuisine_id
-                LEFT JOIN Goals g ON r.goal_id = g.goal_id
+                LEFT JOIN RecipeGoals rg ON r.recipe_id = rg.recipe_id
+                LEFT JOIN Goals g ON rg.goal_id = g.goal_id
+                LEFT JOIN RecipeDietary rd ON r.recipe_id = rd.recipe_id
+                LEFT JOIN DietaryInformation d ON rd.diet_id = d.diet_id
                 WHERE uf.user_id = ?
+                GROUP BY r.recipe_id
                 ORDER BY uf.added_at DESC
             `;
 

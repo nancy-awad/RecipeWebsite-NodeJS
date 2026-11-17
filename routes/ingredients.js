@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const database = require('../config/database').getDB();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 
 // ============================================
 // SQL QUERIES ORGANIZED AT TOP
@@ -50,7 +50,25 @@ const sql = {
     deleteIngredient: 'DELETE FROM Ingredients WHERE ingredient_id = ?',
 
     // Check if ingredient exists
-    checkExists: 'SELECT ingredient_id FROM Ingredients WHERE ingredient_id = ?'
+    checkExists: 'SELECT ingredient_id FROM Ingredients WHERE ingredient_id = ?',
+
+    // Allergen queries
+    getAllergiesForIngredient: `
+        SELECT a.allergy_id, a.name
+        FROM IngredientAllergies ia
+        JOIN AllergiesInformation a ON ia.allergy_id = a.allergy_id
+        WHERE ia.ingredient_id = ?
+    `,
+
+    addAllergyToIngredient: `
+        INSERT INTO IngredientAllergies (ingredient_id, allergy_id)
+        VALUES (?, ?)
+    `,
+
+    removeAllergyFromIngredient: `
+        DELETE FROM IngredientAllergies
+        WHERE ingredient_id = ? AND allergy_id = ?
+    `
 };
 
 // ============================================
@@ -102,24 +120,37 @@ router.get('/:id', (req, res) => {
             });
         }
 
-        // Get recipes that use this ingredient
-        database.all(sql.getRecipesByIngredient, [ingredientId], (err, recipes) => {
-            if (err) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Error fetching recipes for this ingredient',
-                    error: err.message
+        // Get recipes and allergens for this ingredient
+        let pending = 2;
+        let failed = false;
+
+        const done = () => {
+            if (--pending === 0 && !failed) {
+                res.status(200).json({
+                    success: true,
+                    data: ingredient
                 });
             }
+        };
 
-            // Combine ingredient data with recipes
+        const fail = (msg, error) => {
+            if (!failed) {
+                failed = true;
+                res.status(500).json({ success: false, message: msg, error: error.message });
+            }
+        };
+
+        database.all(sql.getRecipesByIngredient, [ingredientId], (err, recipes) => {
+            if (err) return fail('Error fetching recipes for this ingredient', err);
             ingredient.recipes = recipes;
             ingredient.recipe_count = recipes.length;
+            done();
+        });
 
-            res.status(200).json({
-                success: true,
-                data: ingredient
-            });
+        database.all(sql.getAllergiesForIngredient, [ingredientId], (err, allergies) => {
+            if (err) return fail('Error fetching allergies for this ingredient', err);
+            ingredient.allergies = allergies;
+            done();
         });
     });
 });
@@ -283,6 +314,122 @@ router.delete('/:id', authenticate, (req, res) => {
                 success: true,
                 message: 'Ingredient deleted successfully'
             });
+        });
+    });
+});
+
+// ============================================
+// ALLERGEN ROUTES
+// ============================================
+
+/**
+ * Get allergies for an ingredient
+ * GET /api/ingredients/:id/allergies
+ * Public route
+ */
+router.get('/:id/allergies', (req, res) => {
+    const ingredientId = req.params.id;
+
+    database.get(sql.checkExists, [ingredientId], (err, row) => {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: 'Database error',
+                error: err.message
+            });
+        }
+
+        if (!row) {
+            return res.status(404).json({
+                success: false,
+                message: 'Ingredient not found'
+            });
+        }
+
+        database.all(sql.getAllergiesForIngredient, [ingredientId], (err, allergies) => {
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Error fetching allergies',
+                    error: err.message
+                });
+            }
+
+            res.status(200).json({
+                success: true,
+                count: allergies.length,
+                data: allergies
+            });
+        });
+    });
+});
+
+/**
+ * Add allergen to ingredient
+ * POST /api/ingredients/:id/allergies
+ * Requires admin authentication
+ */
+router.post('/:id/allergies', requireAdmin, (req, res) => {
+    const ingredientId = req.params.id;
+    const { allergy_id } = req.body;
+
+    if (!allergy_id) {
+        return res.status(400).json({
+            success: false,
+            message: 'allergy_id is required'
+        });
+    }
+
+    database.run(sql.addAllergyToIngredient, [ingredientId, allergy_id], function (err) {
+        if (err) {
+            if (err.message.includes('UNIQUE constraint') || err.message.includes('PRIMARY KEY')) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'This allergen is already assigned to this ingredient'
+                });
+            }
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to add allergen to ingredient',
+                error: err.message
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Allergen added to ingredient'
+        });
+    });
+});
+
+/**
+ * Remove allergen from ingredient
+ * DELETE /api/ingredients/:id/allergies/:allergyId
+ * Requires admin authentication
+ */
+router.delete('/:id/allergies/:allergyId', requireAdmin, (req, res) => {
+    const ingredientId = req.params.id;
+    const allergyId = req.params.allergyId;
+
+    database.run(sql.removeAllergyFromIngredient, [ingredientId, allergyId], function (err) {
+        if (err) {
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to remove allergen from ingredient',
+                error: err.message
+            });
+        }
+
+        if (this.changes === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Allergen not found on this ingredient'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Allergen removed from ingredient'
         });
     });
 });

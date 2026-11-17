@@ -9,6 +9,7 @@ class Database {
             if (err) {
                 console.error('Error opening database:', err.message);
             } else {
+                this.db.run("PRAGMA foreign_keys = ON");
                 console.log('Connected to SQLite database');
             }
         });

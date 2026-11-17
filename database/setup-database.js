@@ -22,30 +22,29 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // Read SQL files
 const createTablesSQL = fs.readFileSync(path.join(__dirname, 'create_tables.sql'), 'utf-8');
-const userTablesSQL = fs.readFileSync(path.join(__dirname, 'user_tables.sql'), 'utf-8');
 const insertDataSQL = fs.readFileSync(path.join(__dirname, 'insert_data.sql'), 'utf-8');
 
 console.log('\n=== Starting Database Setup ===\n');
 
-// Step 1: Create base tables
-db.exec(createTablesSQL, (err) => {
+// Enable foreign keys before executing any SQL
+db.run("PRAGMA foreign_keys = ON", (err) => {
     if (err) {
-        console.error('Error creating tables:', err.message);
+        console.error('Error enabling foreign keys:', err.message);
         db.close();
         process.exit(1);
     }
-    console.log('✓ Base tables created successfully.');
+    console.log('✓ Foreign keys enabled.');
 
-    // Step 2: Add user tables
-    db.exec(userTablesSQL, (err) => {
+    // Step 1: Create all tables
+    db.exec(createTablesSQL, (err) => {
         if (err) {
-            console.error('Error creating user tables:', err.message);
+            console.error('Error creating tables:', err.message);
             db.close();
             process.exit(1);
         }
-        console.log('✓ User tables created successfully.');
+        console.log('✓ Tables created successfully.');
 
-        // Step 3: Insert sample data
+        // Step 2: Insert sample data
         db.exec(insertDataSQL, (err) => {
             if (err) {
                 console.error('Error inserting data:', err.message);

@@ -47,8 +47,12 @@ const sql = {
     // DELETE queries
     deleteCuisine: 'DELETE FROM Cuisines WHERE cuisine_id = ?',
 
+    // Reassign recipes before deleting a cuisine
+    findInternationalCuisine: "SELECT cuisine_id FROM Cuisines WHERE name = 'Internationale'",
+    reassignRecipes: 'UPDATE Recipes SET cuisine_id = ? WHERE cuisine_id = ?',
+
     // Check if cuisine exists
-    checkExists: 'SELECT cuisine_id FROM Cuisines WHERE cuisine_id = ?'
+    checkExists: 'SELECT cuisine_id, name FROM Cuisines WHERE cuisine_id = ?'
 };
 
 // ============================================
@@ -243,27 +247,58 @@ router.delete('/:id', requireAdmin, (req, res) => {
             });
         }
 
-        // Delete the cuisine
-        database.run(sql.deleteCuisine, [cuisineId], function (err) {
-            if (err) {
-                // Check if error is due to foreign key constraint
-                if (err.message.includes('FOREIGN KEY constraint failed')) {
-                    return res.status(409).json({
-                        success: false,
-                        message: 'Cannot delete cuisine: It is used by existing recipes. Please remove or update those recipes first.'
-                    });
-                }
+        // Prevent deleting "Internationale" itself
+        if (row.name === 'Internationale') {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot delete the "Internationale" cuisine. It is used as the default fallback.'
+            });
+        }
 
+        // Find the "Internationale" cuisine to reassign recipes to
+        database.get(sql.findInternationalCuisine, [], (err, intlRow) => {
+            if (err) {
                 return res.status(500).json({
                     success: false,
-                    message: 'Failed to delete cuisine',
+                    message: 'Database error',
                     error: err.message
                 });
             }
 
-            res.status(200).json({
-                success: true,
-                message: 'Cuisine deleted successfully'
+            if (!intlRow) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Fallback cuisine "Internationale" not found in database'
+                });
+            }
+
+            // Reassign recipes from this cuisine to "Internationale"
+            database.run(sql.reassignRecipes, [intlRow.cuisine_id, cuisineId], function (err) {
+                if (err) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Failed to reassign recipes',
+                        error: err.message
+                    });
+                }
+
+                const reassignedCount = this.changes;
+
+                // Now delete the cuisine
+                database.run(sql.deleteCuisine, [cuisineId], function (err) {
+                    if (err) {
+                        return res.status(500).json({
+                            success: false,
+                            message: 'Failed to delete cuisine',
+                            error: err.message
+                        });
+                    }
+
+                    res.status(200).json({
+                        success: true,
+                        message: `Cuisine deleted successfully. ${reassignedCount} recipe(s) reassigned to "Internationale".`
+                    });
+                });
             });
         });
     });
